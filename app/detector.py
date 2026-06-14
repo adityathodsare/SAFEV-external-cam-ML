@@ -220,7 +220,7 @@ def detect_countdown_near_traffic_light(image, bbox):
             best_value = value
             best_score = score
 
-    if best_value is not None and best_score >= 0.18:
+    if best_value is not None and best_value > 0 and best_score >= 0.18:
         return best_value
     return None
 
@@ -267,6 +267,45 @@ def draw_detection_info(image, detection_info):
                     (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 
 
+def select_best_traffic_light(candidates):
+    """
+    Select the best traffic light from multiple candidates
+    with improved logic to prefer valid detections over unknowns.
+    """
+    if not candidates:
+        return None
+    
+    # First, separate valid and unknown detections
+    valid_detections = [c for c in candidates if c["color"] != "unknown"]
+    unknown_detections = [c for c in candidates if c["color"] == "unknown"]
+    
+    # Log all candidates for debugging
+    for i, c in enumerate(candidates):
+        logger.info(f"Candidate {i}: color={c['color']}, score={c['score']:.3f}, conf={c.get('model_confidence', 0):.2f}")
+    
+    # If we have valid detections, choose the best one based on score and confidence
+    if valid_detections:
+        # Sort by: score (highest first), then model confidence, then area
+        valid_detections.sort(key=lambda x: (
+            x["score"],
+            x.get("model_confidence", 0),
+            x.get("area", 0)
+        ), reverse=True)
+        
+        best = valid_detections[0]
+        logger.info(f"Selected valid detection: {best['color']} (score: {best['score']:.3f})")
+        return best
+    
+    # If no valid detections, return the unknown with highest score (if any)
+    if unknown_detections:
+        unknown_detections.sort(key=lambda x: x["score"], reverse=True)
+        best = unknown_detections[0]
+        logger.info(f"No valid detections, using unknown with score: {best['score']:.3f}")
+        return best
+    
+    return None
+
+
 def detect_objects(image_path):
     image = cv2.imread(image_path)
     if image is None:
@@ -287,7 +326,7 @@ def detect_objects(image_path):
         "score": 0.0,
     }
 
-    best_tl_candidate = None
+    traffic_light_candidates = []
     person_count = vehicle_count = tl_count = 0
 
     for r in results:
@@ -326,17 +365,10 @@ def detect_objects(image_path):
                     "model_confidence": conf,
                     "area": max((x2 - x1) * (y2 - y1), 1),
                 }
+                
+                traffic_light_candidates.append(candidate)
 
-                candidate_rank = (
-                    1 if candidate["color"] != "unknown" else 0,
-                    candidate["score"],
-                    candidate["countdown"] is not None,
-                    conf,
-                    candidate["area"],
-                )
-                if best_tl_candidate is None or candidate_rank > best_tl_candidate["rank"]:
-                    best_tl_candidate = {"rank": candidate_rank, "info": candidate}
-
+                # Set color for bounding box
                 if candidate["color"] == "red":
                     color = (0, 0, 255)
                 elif candidate["color"] == "yellow":
@@ -346,6 +378,7 @@ def detect_objects(image_path):
                 else:
                     color = (128, 128, 128)
 
+                # Create label
                 label = "TL: UNKNOWN"
                 if candidate["color"] != "unknown":
                     label = f"TL: {candidate['color'].upper()}"
@@ -359,18 +392,21 @@ def detect_objects(image_path):
                         label += " *"
 
                 logger.info(
-                    "Traffic light bbox=%s color=%s score=%.3f countdown=%s",
+                    "Traffic light bbox=%s color=%s score=%.3f countdown=%s conf=%s",
                     [x1, y1, x2, y2],
                     candidate["color"],
                     candidate["score"],
                     candidate["countdown"],
+                    candidate["confidence"]
                 )
             else:
                 color = (128, 128, 128)
                 label = f"{name} {conf:.2f}"
 
+            # Draw bounding box
             cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
 
+            # Draw divider lines for traffic lights
             if name == "traffic light":
                 height = y2 - y1
                 region_h = max(height // 3, 1)
@@ -378,6 +414,7 @@ def detect_objects(image_path):
                     line_y = y1 + i * region_h
                     cv2.line(image, (x1, line_y), (x2, line_y), (200, 200, 200), 1)
 
+            # Draw label background and text
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
             cv2.rectangle(image, (x1, y1 - th - 10), (x1 + tw, y1), color, -1)
             cv2.putText(image, label, (x1, y1 - 5),
@@ -390,8 +427,11 @@ def detect_objects(image_path):
             })
             detected_objects.append(name)
 
-    if best_tl_candidate is not None:
-        traffic_light_info = best_tl_candidate["info"]
+    # Select the best traffic light from all candidates
+    best_candidate = select_best_traffic_light(traffic_light_candidates)
+    if best_candidate:
+        traffic_light_info = best_candidate
+        logger.info(f"Final traffic light selection: {best_candidate['color']} (score: {best_candidate['score']:.3f})")
 
     detection_info = {
         "counts": {
@@ -415,7 +455,7 @@ def detect_objects(image_path):
         cv2.imwrite(orig_path, original)
 
     logger.info(f"Detection #{seq_num}: {person_count} people, "
-                f"{vehicle_count} vehicles, {tl_count} traffic lights")
+                f"{vehicle_count} vehicles, {tl_count} traffic lights - Final TL: {traffic_light_info['color']}")
 
     return {
         "id": seq_num,
@@ -448,7 +488,8 @@ def capture_from_webcam():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
-    for _ in range(5):
+    # Warm up camera
+    for _ in range(10):
         cap.read()
 
     best_frame, best_sharp = None, 0

@@ -32,6 +32,7 @@ active_source = "webcam"
 capture_task = None
 last_countdown = None
 last_color = "unknown"
+last_valid_detection = None  # Store last valid detection with high confidence
 
 
 @asynccontextmanager
@@ -66,25 +67,54 @@ app.mount("/uploads",    StaticFiles(directory="uploads"),    name="uploads")
 
 def _apply_temporal_smoothing(result):
     """
-    Keep the last stable color for brief misses, but do not fabricate countdowns.
-    Mutates result in-place and returns it.
+    Improved temporal smoothing that respects current detections
+    and only uses history when confidence is low.
     """
-    global last_countdown, last_color
-
+    global last_countdown, last_color, last_valid_detection
+    
     tl = result["traffic_light"]
-    new_cd = tl["countdown"]
-    if new_cd is not None:
-        last_countdown = new_cd
-        last_color = tl["color"]
-    else:
-        result["traffic_light"]["countdown"] = None
-        result["traffic_light"]["countdown_detected"] = False
-        if last_color != "unknown":
-            result["traffic_light"]["color"] = last_color
-
-    if tl["color"] != "unknown":
-        last_color = tl["color"]
-
+    current_color = tl["color"]
+    current_confidence = tl.get("confidence", "low")
+    current_score = tl.get("score", 0.0)
+    
+    # If we have a valid detection with good confidence, use it
+    if current_color != "unknown" and current_confidence in ["very_high", "high"]:
+        last_color = current_color
+        last_valid_detection = {
+            "color": current_color,
+            "countdown": tl["countdown"],
+            "confidence": current_confidence,
+            "score": current_score
+        }
+        logger.info(f"High confidence detection: {current_color} (score: {current_score})")
+        return result
+    
+    # If current detection is unknown but we had a recent valid detection,
+    # and the current frame has very low confidence, use last valid
+    if current_color == "unknown" and last_valid_detection is not None:
+        # Check if the last valid detection is still recent (within last 3 detections)
+        # For now, we'll just use it if current score is very low
+        if current_score < 0.1:
+            logger.info(f"Using last valid detection: {last_valid_detection['color']} (current score too low)")
+            result["traffic_light"]["color"] = last_valid_detection["color"]
+            result["traffic_light"]["confidence"] = "medium"  # Downgrade confidence
+            return result
+    
+    # If current detection is valid but low confidence, keep it
+    if current_color != "unknown":
+        last_color = current_color
+        if current_confidence in ["very_high", "high"]:
+            last_valid_detection = {
+                "color": current_color,
+                "countdown": tl["countdown"],
+                "confidence": current_confidence,
+                "score": current_score
+            }
+    
+    # Handle countdown
+    if tl["countdown"] is not None:
+        last_countdown = tl["countdown"]
+    
     return result
 
 
@@ -102,9 +132,11 @@ async def periodic_capture():
                     result["original_image"],
                     result,
                 )
-                logger.info("Detection #%d complete – TL=%s cd=%s",
+                logger.info("Detection #%d complete – TL=%s (conf=%s, score=%.3f) cd=%s",
                             result['id'],
                             result['traffic_light']['color'],
+                            result['traffic_light']['confidence'],
+                            result['traffic_light'].get('score', 0.0),
                             result['traffic_light']['countdown'])
         except Exception as exc:
             logger.error("Periodic capture error: %s", exc)
@@ -131,7 +163,7 @@ async def root():
 
 @app.get("/webcam/capture")
 async def webcam_capture():
-    global last_countdown, last_color
+    global last_countdown, last_color, last_valid_detection
     try:
         image_path, seq_num = capture_from_webcam()
         result = detect_objects(image_path)
