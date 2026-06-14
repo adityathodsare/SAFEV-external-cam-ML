@@ -225,17 +225,57 @@ def detect_countdown_near_traffic_light(image, bbox):
     return None
 
 
+# def draw_detection_info(image, detection_info):
+#     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#     cv2.putText(image, f"Time: {timestamp}",
+#                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+#     counts = detection_info["counts"]
+#     cv2.putText(image,
+#                 f"People: {counts['people']} | "
+#                 f"Vehicles: {counts['vehicles']} | "
+#                 f"Traffic Lights: {counts['traffic_lights']}",
+#                 (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+#     tl = detection_info["traffic_light"]
+#     if not tl["detected"] or tl["color"] == "unknown":
+#         return
+
+#     if tl["color"] == "red":
+#         bgr = (0, 0, 255)
+#         label = "RED LIGHT"
+#     elif tl["color"] == "yellow":
+#         bgr = (0, 255, 255)
+#         label = "YELLOW LIGHT"
+#     elif tl["color"] == "green":
+#         bgr = (0, 255, 0)
+#         label = "GREEN LIGHT"
+#     else:
+#         return
+
+#     conf_stars = {
+#         "very_high": "***",
+#         "high": "**",
+#         "medium": "*",
+#     }.get(tl["confidence"], "")
+
+#     cv2.putText(image, f"{label} {conf_stars}".strip(),
+#                 (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.75, bgr, 2)
+
+#     if tl["countdown"] is not None:
+#         cv2.putText(image, f"Countdown: {tl['countdown']}s",
+#                     (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
 def draw_detection_info(image, detection_info):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cv2.putText(image, f"Time: {timestamp}",
-                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)  # was 0.7, 2
 
     counts = detection_info["counts"]
     cv2.putText(image,
                 f"People: {counts['people']} | "
                 f"Vehicles: {counts['vehicles']} | "
-                f"Traffic Lights: {counts['traffic_lights']}",
-                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                f"TL: {counts['traffic_lights']}",
+                (10, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)  # was 0.6, 2
 
     tl = detection_info["traffic_light"]
     if not tl["detected"] or tl["color"] == "unknown":
@@ -260,12 +300,11 @@ def draw_detection_info(image, detection_info):
     }.get(tl["confidence"], "")
 
     cv2.putText(image, f"{label} {conf_stars}".strip(),
-                (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.75, bgr, 2)
+                (10, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.5, bgr, 1)  # was 0.75, 2
 
     if tl["countdown"] is not None:
         cv2.putText(image, f"Countdown: {tl['countdown']}s",
-                    (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-
+                    (10, 74), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 0), 1)  # was 0.7, 2
 
 def select_best_traffic_light(candidates):
     """
