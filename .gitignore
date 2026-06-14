@@ -1,0 +1,72 @@
+# Virtual Environment
+
+.venv/
+venv/
+env/
+
+# Python Cache
+
+**pycache**/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code
+
+.vscode/
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# Database
+
+*.db
+*.sqlite3
+
+# Upload and detection folders
+
+uploads/
+detections/
+
+# Logs
+
+*.log
+
+# Environment variables
+
+.env
+
+# Model weights (large files)
+
+*.pt
+*.pth
+
+# Temporary files
+
+*.tmp
+*.temp
+
+# Python build files
+
+build/
+dist/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+
+.ipynb_checkpoints/
+
+# Testing cache
+
+.pytest_cache/
+
+# Coverage reports
+
+.coverage
+htmlcov/
+
+.venv/
+__pycache__/
+*.pyc
