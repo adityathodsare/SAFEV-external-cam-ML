@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import os
 from datetime import datetime
 
 _conn   = sqlite3.connect("database.db", check_same_thread=False)
@@ -106,14 +107,33 @@ def save_detection(sequence_number, image_path, original_image, result):
     _conn.commit()
     return _cursor.lastrowid
 
+def cleanup_stale_records():
+    """Remove database records whose image files no longer exist on disk."""
+    try:
+        _cursor.execute("SELECT sequence_number, image_path FROM detections")
+        rows = _cursor.fetchall()
+        stale_ids = []
+        for seq, img_path in rows:
+            target_file = img_path if img_path else f"detections/{seq}.jpg"
+            if not os.path.exists(target_file) and not os.path.exists(f"detections/{seq}.jpg"):
+                stale_ids.append(seq)
+        if stale_ids:
+            for seq in stale_ids:
+                _cursor.execute("DELETE FROM detections WHERE sequence_number=?", (seq,))
+            _conn.commit()
+    except Exception as e:
+        print(f"Cleanup error: {e}")
+
 
 def get_latest():
+    cleanup_stale_records()
     _cursor.execute(
         "SELECT * FROM detections ORDER BY sequence_number DESC LIMIT 1")
     return _row_to_dict(_cursor.fetchone())
 
 
 def get_history(limit=50):
+    cleanup_stale_records()
     _cursor.execute(
         "SELECT * FROM detections ORDER BY sequence_number DESC LIMIT ?",
         (limit,))
