@@ -33,6 +33,9 @@ python -m pip install -r requirements.txt
 
 ```powershell
 python -m app.main
+
+```linux machine (BASH)
+PYTHONPATH=/home/aditya/.local/lib/python3.14/site-packages:/usr/lib/python3/dist-packages python -m app.main
 # Server at http://localhost:8000
 # Auto-captures from webcam every 20 seconds
 ```
